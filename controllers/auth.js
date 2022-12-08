@@ -1,68 +1,65 @@
-import { db } from "../db.js";
-import bcrypt from "bcryptjs";
+import User from "../models/User.js"
+import CryptoJS from "crypto-js";
 import jwt from "jsonwebtoken";
 
+export const register = async (req, res) => {
 
-//register
-export const register = (req, res) => {
-  //const {username,email,password} = req.body
-  
-  const q = "SELECT * FROM users WHERE email = ? OR username = ?";
-
-  db.query(q, [req.body.email, req.body.username], (err, data) => {
-    if (err) return res.status(500).json(err);
-    if (data.length) return res.status(409).json({message:"User already exists!"});
-
-  
-    const salt = bcrypt.genSaltSync(10);
-    const hash = bcrypt.hashSync(req.body.password, salt);
-
-    const q = "INSERT INTO users(`username`,`email`,`password`) VALUES (?)";
-    const values = [req.body.username, req.body.email, hash];
-
-    db.query(q, [values], (err, data) => {
-      if (err) return res.status(500).json(err);
-      return res.status(200).json("User has been created.");
-    });
+  const newUser = new User({
+    username: req.body.username,
+    email: req.body.email,
+    password: CryptoJS.AES.encrypt(
+      req.body.password,
+      process.env.SECRET_KEY
+    ).toString(),
   });
- 
+  try {
+    const user = await newUser.save();
+    res.status(201).json(user);
+  } catch (err) {
+    res.status(500).json(err);
+  }
 };
 
 
-//Login
-export const login = (req, res) => {
-    //CHECK USER
-  
-    const q = "SELECT * FROM users WHERE email = ?";
-  
-    db.query(q, [req.body.email], (err, data) => {
-      if (err) return res.status(500).json(err);
-      if (data.length === 0) return res.status(404).json("User not found!");
-  
-      //Check password
-      const isPasswordCorrect = bcrypt.compareSync(
-        req.body.password,
-        data[0].password
-      );
-  
-      if (!isPasswordCorrect)
-        return res.status(400).json({msgErr:'Wrong email or password!'});
-  
-      const token = jwt.sign({ id: data[0].id }, "jwtkey");
-      const { password, ...other } = data[0];
-  
-      res
-        .cookie("access_token", token, {
-          httpOnly: true,
-        })
-        .status(200)
-        .json(other);
-    });
-  };
-  
-  export const logout = (req, res) => {
-    res.clearCookie("access_token",{
-      sameSite:"none",
-      secure:true
-    }).status(200).json("User has been logged out.")
-  };
+
+export const login = async (req,res,next)=>{
+  try {
+    const user = await User.findOne({ email: req.body.email });
+    !user && res.status(401).json({ success: false, message: error.message });
+
+    const bytes = CryptoJS.AES.decrypt(user.password, process.env.SECRET_KEY);
+    const originalPassword = bytes.toString(CryptoJS.enc.Utf8);
+
+    originalPassword !== req.body.password &&
+      res.status(401).json({ success: false, message: error.message });
+
+    const accessToken = jwt.sign(
+      { id: user._id, isAdmin: user.isAdmin },
+      process.env.SECRET_KEY,
+      { expiresIn: "5d" }
+    );
+
+    const { password, ...info } = user._doc;
+
+    res.status(200).json({ ...info, accessToken });
+  } catch (err) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+}
+
+export const getMyProfile = async (req, res) => {
+  try {
+    const user = await User.findById(req.username);
+
+    // sendToken(res, user, 201, `Welcome back ${user.name}`);
+     const accessToken = jwt.sign(
+      { id: user._id, isAdmin: user.isAdmin },
+      process.env.SECRET_KEY,
+      { expiresIn: "5d" }
+    );
+    const { password, ...info } = user._doc;
+    res.status(200).json({ ...info, accessToken });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
