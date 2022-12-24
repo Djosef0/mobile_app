@@ -31,7 +31,7 @@ app.use(express.json());
 app.use("/api/auth", authRoute);
 
 
-app.listen(8800,"192.168.1.135", () => {
+app.listen(8800,"192.168.1.151", () => {
   connect();
   console.log("Connected!");
 });

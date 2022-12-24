@@ -1,7 +1,7 @@
 import User from "../models/User.js"
 import CryptoJS from "crypto-js";
 import jwt from "jsonwebtoken";
-
+import fs from "fs"
 export const register = async (req, res) => {
 
   const newUser = new User({
@@ -12,6 +12,7 @@ export const register = async (req, res) => {
       process.env.SECRET_KEY
     ).toString(),
   });
+  const avatar = req.files.avatar.tempFilePath;
   try {
     const user = await newUser.save();
     res.status(201).json(user);
